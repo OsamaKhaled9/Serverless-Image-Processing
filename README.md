@@ -36,7 +36,7 @@ The architecture is designed for:
 
 ## Architecture Diagram
 
-![Architecture Diagram](Blank diagram.png)
+![Architecture Diagram](assets/Blank%20diagram.png)
 
 ### Architecture Flow
 
