@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './App.css';
+import { getUploadUrl } from "./helpers/api";
+
 
 function App() {
   // State Management
@@ -10,6 +12,7 @@ function App() {
   const [dragOver, setDragOver] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusType, setStatusType] = useState('');
+  
   
   // Configuration states
   const [resizeWidth, setResizeWidth] = useState('800');
@@ -77,66 +80,99 @@ function App() {
     document.getElementById('file-input').click();
   };
 
-  const processImage = async () => {
-    if (!selectedImage || !selectedOption) {
-      setStatusMessage('Please select both an image and a processing option');
-      setStatusType('error');
-      return;
-    }
+const uploadImageToS3 = async (file) => {
+  try {
+    // 1️⃣  Ask backend for a pre-signed URL
+    const { uploadURL, key } = await getUploadUrl(file);
 
-    setIsProcessing(true);
-    setStatusMessage('Processing your image...');
-    setStatusType('processing');
+    // 2️⃣  PUT the file straight to S3
+    const put = await fetch(uploadURL, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!put.ok) throw new Error("S3 upload failed");
 
-    const formData = new FormData();
-    formData.append('image', selectedImage);
-    formData.append('operation', selectedOption);
-    
-    switch(selectedOption) {
-      case 'resize':
-        formData.append('width', resizeWidth);
-        formData.append('height', resizeHeight);
-        formData.append('mode', resizeMode);
-        break;
-      case 'watermark':
-        formData.append('text', watermarkText);
-        formData.append('position', watermarkPosition);
-        formData.append('opacity', watermarkOpacity);
-        break;
-      case 'compress':
-        formData.append('quality', compressionQuality);
-        formData.append('format', compressionFormat);
-        break;
-    }
+    return { success: true, key };   // key stored in S3 → pass to Lambda later
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: err.message };
+  }
+};
 
-    try {
-      // TODO: Replace with your AWS Lambda endpoint
-      const response = await fetch('/api/process-image', {
-        method: 'POST',
-        body: formData
-      });
+ const processImage = async () => {
+  if (!selectedImage || !selectedOption) {
+    setStatusMessage('Please select both an image and a processing option');
+    setStatusType('error');
+    return;
+  }
 
-      if (response.ok) {
-        const blob = await response.blob();
-        setProcessedImage(blob);
-        setStatusMessage('Image processed successfully!');
-        setStatusType('success');
-      } else {
-        throw new Error('Processing failed');
-      }
-    } catch (error) {
-      // Demo mode fallback
-      setTimeout(() => {
-        setProcessedImage(selectedImage);
-        setStatusMessage('Image processed successfully! (Demo mode)');
-        setStatusType('success');
-        setIsProcessing(false);
-      }, 2000);
-      return;
-    }
-    
+  setIsProcessing(true);
+  setStatusMessage('Uploading image to S3...');
+  setStatusType('processing');
+
+  // First, upload the image to S3
+  const uploadResult = await uploadImageToS3(selectedImage);
+  
+  if (!uploadResult.success) {
+    setStatusMessage(`Upload failed: ${uploadResult.error}`);
+    setStatusType('error');
     setIsProcessing(false);
-  };
+    return;
+  }
+
+  setStatusMessage('Image uploaded! Processing...');
+
+  const formData = new FormData();
+  formData.append('imageKey', uploadResult.key); // Use S3 key instead of file
+  formData.append('operation', selectedOption);
+  
+  switch(selectedOption) {
+    case 'resize':
+      formData.append('width', resizeWidth);
+      formData.append('height', resizeHeight);
+      formData.append('mode', resizeMode);
+      break;
+    case 'watermark':
+      formData.append('text', watermarkText);
+      formData.append('position', watermarkPosition);
+      formData.append('opacity', watermarkOpacity);
+      break;
+    case 'compress':
+      formData.append('quality', compressionQuality);
+      formData.append('format', compressionFormat);
+      break;
+  }
+
+  try {
+    // TODO: Replace with your AWS Lambda endpoint (we'll create this next)
+    const response = await fetch('/api/process-image', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (response.ok) {
+      const blob = await response.blob();
+      setProcessedImage(blob);
+      setStatusMessage('Image processed successfully!');
+      setStatusType('success');
+    } else {
+      throw new Error('Processing failed');
+    }
+  } catch (error) {
+    // Demo mode fallback - for now, just show the original image
+    setTimeout(() => {
+      setProcessedImage(selectedImage);
+      setStatusMessage('Image uploaded to S3 successfully! (Processing will work when Lambda is set up)');
+      setStatusType('success');
+      setIsProcessing(false);
+    }, 1000);
+    return;
+  }
+  
+  setIsProcessing(false);
+};
+
 
   const downloadImage = () => {
     if (processedImage) {

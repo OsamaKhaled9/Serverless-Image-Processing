@@ -79,14 +79,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "image_buckets_lifecycle" {
 
   bucket = each.value
 
-  rule {
-    id     = "delete_old_versions"
-    status = "Enabled"
-
-    noncurrent_version_expiration {
-      noncurrent_days = 30
-    }
+rule {
+  id     = "delete_old_versions"
+  status = "Enabled"
+  filter {
+    prefix = ""  # Apply to all objects
   }
+  noncurrent_version_expiration {
+    noncurrent_days = 30
+  }
+}
+
 }
 
 # CORS configuration for image buckets (needed for frontend uploads)
