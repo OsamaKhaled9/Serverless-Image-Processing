@@ -115,3 +115,17 @@ resource "aws_s3_bucket_cors_configuration" "processed_images_cors" {
     max_age_seconds = 3000
   }
 }
+
+# S3 bucket notification to trigger resize Lambda
+resource "aws_s3_bucket_notification" "original_images_notification" {
+  bucket = aws_s3_bucket.original_images_bucket.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.resize_image.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = ""
+    filter_suffix       = ""
+  }
+
+  depends_on = [aws_lambda_permission.s3_invoke_resize]
+}

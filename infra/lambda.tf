@@ -45,11 +45,12 @@ resource "aws_iam_role_policy" "lambda_s3_policy" {
       {
         Effect = "Allow"
         Action = [
-          "s3:PutObject",
-          "s3:GetObject"
+          "s3:GetObject",
+          "s3:PutObject"
         ]
         Resource = [
-          "${aws_s3_bucket.original_images_bucket.arn}/*"
+          "${aws_s3_bucket.original_images_bucket.arn}/*",
+          "${aws_s3_bucket.processed_images_bucket.arn}/*"
         ]
       },
       {
@@ -64,3 +65,34 @@ resource "aws_iam_role_policy" "lambda_s3_policy" {
     ]
   })
 }
+
+
+# Resize Lambda function
+resource "aws_lambda_function" "resize_image" {
+  filename      = "./lambdas/resize/deployment.zip"
+  function_name = "${var.project_name}-resize-image-${var.environment}"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "index.handler"
+  runtime       = "nodejs18.x"
+  timeout       = 30
+  memory_size   = 512
+
+  source_code_hash = filebase64sha256("./lambdas/resize/deployment.zip")
+
+  environment {
+    variables = {
+      ORIGINAL_IMAGES_BUCKET  = aws_s3_bucket.original_images_bucket.id
+      PROCESSED_IMAGES_BUCKET = aws_s3_bucket.processed_images_bucket.id
+    }
+  }
+}
+
+# Lambda permission for S3 to invoke resize function
+resource "aws_lambda_permission" "s3_invoke_resize" {
+  statement_id  = "AllowExecutionFromS3Bucket"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.resize_image.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.original_images_bucket.arn
+}
+
