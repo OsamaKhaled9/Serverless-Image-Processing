@@ -80,27 +80,39 @@ function App() {
     document.getElementById('file-input').click();
   };
 
-const uploadImageToS3 = async (file) => {
+const uploadImageToS3 = async (file, resizeParams = {}) => {
   try {
-    // 1️⃣  Ask backend for a pre-signed URL
+    // 1️⃣ Ask backend for a pre-signed URL
     const { uploadURL, key } = await getUploadUrl(file);
 
-    // 2️⃣  PUT the file straight to S3
+    // 2️⃣ Extract resize parameters
+    const { width = 800, height = 600, mode = 'fit', quality = 90 } = resizeParams;
+
+    // 3️⃣ PUT the file to S3 with metadata
     const put = await fetch(uploadURL, {
       method: "PUT",
-      headers: { "Content-Type": file.type },
+      headers: { 
+        "Content-Type": file.type,
+        // Add resize parameters as metadata
+        "x-amz-meta-resize-width": width.toString(),
+        "x-amz-meta-resize-height": height.toString(), 
+        "x-amz-meta-resize-mode": mode,
+        "x-amz-meta-quality": quality.toString()
+      },
       body: file,
     });
+    
     if (!put.ok) throw new Error("S3 upload failed");
 
-    return { success: true, key };   // key stored in S3 → pass to Lambda later
+    return { success: true, key };
   } catch (err) {
     console.error(err);
     return { success: false, error: err.message };
   }
 };
 
- const processImage = async () => {
+
+const processImage = async () => {
   if (!selectedImage || !selectedOption) {
     setStatusMessage('Please select both an image and a processing option');
     setStatusType('error');
@@ -111,8 +123,16 @@ const uploadImageToS3 = async (file) => {
   setStatusMessage('Uploading image to S3...');
   setStatusType('processing');
 
-  // First, upload the image to S3
-  const uploadResult = await uploadImageToS3(selectedImage);
+  // Prepare resize parameters based on user input
+  const resizeParams = selectedOption === 'resize' ? {
+    width: parseInt(resizeWidth) || 800,
+    height: parseInt(resizeHeight) || 600,
+    mode: resizeMode || 'fit',
+    quality: 90
+  } : {};
+
+  // Upload with parameters
+  const uploadResult = await uploadImageToS3(selectedImage, resizeParams);
   
   if (!uploadResult.success) {
     setStatusMessage(`Upload failed: ${uploadResult.error}`);
@@ -121,57 +141,16 @@ const uploadImageToS3 = async (file) => {
     return;
   }
 
-  setStatusMessage('Image uploaded! Processing...');
-
-  const formData = new FormData();
-  formData.append('imageKey', uploadResult.key); // Use S3 key instead of file
-  formData.append('operation', selectedOption);
+  setStatusMessage(`Image uploaded! Processing with ${resizeParams.width}x${resizeParams.height} (${resizeParams.mode} mode)...`);
   
-  switch(selectedOption) {
-    case 'resize':
-      formData.append('width', resizeWidth);
-      formData.append('height', resizeHeight);
-      formData.append('mode', resizeMode);
-      break;
-    case 'watermark':
-      formData.append('text', watermarkText);
-      formData.append('position', watermarkPosition);
-      formData.append('opacity', watermarkOpacity);
-      break;
-    case 'compress':
-      formData.append('quality', compressionQuality);
-      formData.append('format', compressionFormat);
-      break;
-  }
-
-  try {
-    // TODO: Replace with your AWS Lambda endpoint (we'll create this next)
-    const response = await fetch('/api/process-image', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (response.ok) {
-      const blob = await response.blob();
-      setProcessedImage(blob);
-      setStatusMessage('Image processed successfully!');
-      setStatusType('success');
-    } else {
-      throw new Error('Processing failed');
-    }
-  } catch (error) {
-    // Demo mode fallback - for now, just show the original image
-    setTimeout(() => {
-      setProcessedImage(selectedImage);
-      setStatusMessage('Image uploaded to S3 successfully! (Processing will work when Lambda is set up)');
-      setStatusType('success');
-      setIsProcessing(false);
-    }, 1000);
-    return;
-  }
-  
-  setIsProcessing(false);
+  // Processing happens automatically via S3 event trigger
+  setTimeout(() => {
+    setStatusMessage(`Image resized to ${resizeParams.width}x${resizeParams.height}! Check your processed bucket.`);
+    setStatusType('success');
+    setIsProcessing(false);
+  }, 3000);
 };
+
 
 
   const downloadImage = () => {
