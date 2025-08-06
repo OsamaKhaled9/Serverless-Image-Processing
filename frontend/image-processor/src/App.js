@@ -82,23 +82,20 @@ function App() {
 
 const uploadImageToS3 = async (file, resizeParams = {}) => {
   try {
-    // 1️⃣ Ask backend for a pre-signed URL
-    const { uploadURL, key } = await getUploadUrl(file);
+    // Convert parameters to metadata format
+    const metadata = {};
+    if (resizeParams.width) metadata['resize-width'] = resizeParams.width.toString();
+    if (resizeParams.height) metadata['resize-height'] = resizeParams.height.toString();
+    if (resizeParams.mode) metadata['resize-mode'] = resizeParams.mode;
+    if (resizeParams.quality) metadata['quality'] = resizeParams.quality.toString();
 
-    // 2️⃣ Extract resize parameters
-    const { width = 800, height = 600, mode = 'fit', quality = 90 } = resizeParams;
+    // Ask backend for a pre-signed URL with metadata
+    const { uploadURL, key } = await getUploadUrl(file, metadata);
 
-    // 3️⃣ PUT the file to S3 with metadata
+    // PUT the file to S3 (no custom headers needed)
     const put = await fetch(uploadURL, {
       method: "PUT",
-      headers: { 
-        "Content-Type": file.type,
-        // Add resize parameters as metadata
-        "x-amz-meta-resize-width": width.toString(),
-        "x-amz-meta-resize-height": height.toString(), 
-        "x-amz-meta-resize-mode": mode,
-        "x-amz-meta-quality": quality.toString()
-      },
+      headers: { "Content-Type": file.type },
       body: file,
     });
     
@@ -112,6 +109,7 @@ const uploadImageToS3 = async (file, resizeParams = {}) => {
 };
 
 
+
 const processImage = async () => {
   if (!selectedImage || !selectedOption) {
     setStatusMessage('Please select both an image and a processing option');
@@ -123,16 +121,28 @@ const processImage = async () => {
   setStatusMessage('Uploading image to S3...');
   setStatusType('processing');
 
-  // Prepare resize parameters based on user input
-  const resizeParams = selectedOption === 'resize' ? {
-    width: parseInt(resizeWidth) || 800,
-    height: parseInt(resizeHeight) || 600,
-    mode: resizeMode || 'fit',
-    quality: 90
-  } : {};
+  // Prepare parameters based on selected option
+  let uploadParams = {};
+  let processingMessage = '';
+
+  if (selectedOption === 'resize') {
+    uploadParams = {
+      width: parseInt(resizeWidth) || 800,
+      height: parseInt(resizeHeight) || 600,
+      mode: resizeMode || 'fit',
+      quality: 90
+    };
+    processingMessage = `Resizing to ${uploadParams.width}x${uploadParams.height} (${uploadParams.mode} mode)`;
+  } else if (selectedOption === 'watermark') {
+    processingMessage = `Adding watermark "${watermarkText}"`;
+    // Future: Add watermark parameters here
+  } else if (selectedOption === 'compress') {
+    processingMessage = `Compressing to ${compressionQuality}% quality`;
+    // Future: Add compression parameters here
+  }
 
   // Upload with parameters
-  const uploadResult = await uploadImageToS3(selectedImage, resizeParams);
+  const uploadResult = await uploadImageToS3(selectedImage, uploadParams);
   
   if (!uploadResult.success) {
     setStatusMessage(`Upload failed: ${uploadResult.error}`);
@@ -141,15 +151,33 @@ const processImage = async () => {
     return;
   }
 
-  setStatusMessage(`Image uploaded! Processing with ${resizeParams.width}x${resizeParams.height} (${resizeParams.mode} mode)...`);
-  
-  // Processing happens automatically via S3 event trigger
-  setTimeout(() => {
-    setStatusMessage(`Image resized to ${resizeParams.width}x${resizeParams.height}! Check your processed bucket.`);
-    setStatusType('success');
-    setIsProcessing(false);
-  }, 3000);
+  // Update status based on selected option
+  if (selectedOption === 'resize') {
+    setStatusMessage(`✅ Image uploaded! ${processingMessage}...`);
+    
+    // Processing happens automatically via S3 event trigger
+    setTimeout(() => {
+      setStatusMessage(
+        `🎉 Image successfully resized to ${uploadParams.width}x${uploadParams.height}! ` +
+        `Check your processed S3 bucket under "resized/" folder.`
+      );
+      setStatusType('success');
+      setIsProcessing(false);
+    }, 3000);
+  } else {
+    // For watermark and compress (future Lambdas)
+    setStatusMessage(`✅ Image uploaded! ${processingMessage}...`);
+    
+    setTimeout(() => {
+      setStatusMessage(
+        `⚠️ Image uploaded successfully! ${selectedOption.charAt(0).toUpperCase() + selectedOption.slice(1)} Lambda will be implemented next.`
+      );
+      setStatusType('success');
+      setIsProcessing(false);
+    }, 2000);
+  }
 };
+
 
 
 
