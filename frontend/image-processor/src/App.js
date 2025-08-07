@@ -80,14 +80,27 @@ function App() {
     document.getElementById('file-input').click();
   };
 
-const uploadImageToS3 = async (file, resizeParams = {}) => {
+const uploadImageToS3 = async (file, processingParams = {}) => {
   try {
-    // Convert parameters to metadata format
+    // Convert all processing parameters to metadata format
     const metadata = {};
-    if (resizeParams.width) metadata['resize-width'] = resizeParams.width.toString();
-    if (resizeParams.height) metadata['resize-height'] = resizeParams.height.toString();
-    if (resizeParams.mode) metadata['resize-mode'] = resizeParams.mode;
-    if (resizeParams.quality) metadata['quality'] = resizeParams.quality.toString();
+    
+    // Handle resize parameters
+    if (processingParams.width) metadata['resize-width'] = processingParams.width.toString();
+    if (processingParams.height) metadata['resize-height'] = processingParams.height.toString();
+    if (processingParams.mode) metadata['resize-mode'] = processingParams.mode;
+    if (processingParams.quality) metadata['quality'] = processingParams.quality.toString();
+    
+    // Handle watermark parameters
+    if (processingParams.watermarkText) metadata['watermark-text'] = processingParams.watermarkText;
+    if (processingParams.watermarkPosition) metadata['watermark-position'] = processingParams.watermarkPosition;
+    if (processingParams.watermarkOpacity) metadata['watermark-opacity'] = processingParams.watermarkOpacity.toString();
+    if (processingParams.watermarkFontsize) metadata['watermark-fontsize'] = processingParams.watermarkFontsize.toString();
+    
+    // Handle compression parameters
+    if (processingParams.compressQuality) metadata['compress-quality'] = processingParams.compressQuality.toString();
+    if (processingParams.compressFormat) metadata['compress-format'] = processingParams.compressFormat;
+    if (processingParams.compressOptimization) metadata['compress-optimization'] = processingParams.compressOptimization;
 
     // Ask backend for a pre-signed URL with metadata
     const { uploadURL, key } = await getUploadUrl(file, metadata);
@@ -122,27 +135,36 @@ const processImage = async () => {
   setStatusType('processing');
 
   // Prepare parameters based on selected option
-  let uploadParams = {};
+  let processingParams = {};
   let processingMessage = '';
 
   if (selectedOption === 'resize') {
-    uploadParams = {
+    processingParams = {
       width: parseInt(resizeWidth) || 800,
       height: parseInt(resizeHeight) || 600,
       mode: resizeMode || 'fit',
       quality: 90
     };
-    processingMessage = `Resizing to ${uploadParams.width}x${uploadParams.height} (${uploadParams.mode} mode)`;
+    processingMessage = `Resizing to ${processingParams.width}x${processingParams.height} (${processingParams.mode} mode)`;
   } else if (selectedOption === 'watermark') {
-    processingMessage = `Adding watermark "${watermarkText}"`;
-    // Future: Add watermark parameters here
+    processingParams = {
+      watermarkText: watermarkText || '© Your Brand',
+      watermarkPosition: watermarkPosition || 'bottom-right',
+      watermarkOpacity: watermarkOpacity || '0.7',
+      watermarkFontsize: 24
+    };
+    processingMessage = `Adding watermark "${processingParams.watermarkText}" at ${processingParams.watermarkPosition}`;
   } else if (selectedOption === 'compress') {
-    processingMessage = `Compressing to ${compressionQuality}% quality`;
-    // Future: Add compression parameters here
+    processingParams = {
+      compressQuality: compressionQuality || '75',
+      compressFormat: compressionFormat || 'jpeg',
+      compressOptimization: 'medium'
+    };
+    processingMessage = `Compressing to ${processingParams.compressQuality}% quality (${processingParams.compressFormat} format)`;
   }
 
   // Upload with parameters
-  const uploadResult = await uploadImageToS3(selectedImage, uploadParams);
+  const uploadResult = await uploadImageToS3(selectedImage, processingParams);
   
   if (!uploadResult.success) {
     setStatusMessage(`Upload failed: ${uploadResult.error}`);
@@ -152,36 +174,36 @@ const processImage = async () => {
   }
 
   // Update status based on selected option
+  setStatusMessage(`✅ Image uploaded! ${processingMessage}...`);
+  
+  // Processing happens automatically via S3 event trigger
+// Replace the setTimeout section (around lines 165-180) with:
+setTimeout(() => {
   if (selectedOption === 'resize') {
-    setStatusMessage(`✅ Image uploaded! ${processingMessage}...`);
-    
-    // Processing happens automatically via S3 event trigger
-    setTimeout(() => {
-      setStatusMessage(
-        `🎉 Image successfully resized to ${uploadParams.width}x${uploadParams.height}! ` +
-        `Check your processed S3 bucket under "resized/" folder.`
-      );
-      setStatusType('success');
-      setIsProcessing(false);
-    }, 3000);
-  } else {
-    // For watermark and compress (future Lambdas)
-    setStatusMessage(`✅ Image uploaded! ${processingMessage}...`);
-    
-    setTimeout(() => {
-      setStatusMessage(
-        `⚠️ Image uploaded successfully! ${selectedOption.charAt(0).toUpperCase() + selectedOption.slice(1)} Lambda will be implemented next.`
-      );
-      setStatusType('success');
-      setIsProcessing(false);
-    }, 2000);
+    setStatusMessage(
+      `🎉 Image successfully processed! Your resized ${processingParams.width}x${processingParams.height} image ` +
+      `has been saved to the processed S3 bucket under "resized/" folder.`
+    );
+  } else if (selectedOption === 'watermark') {
+    setStatusMessage(
+      `🎉 Watermark processing complete! Your watermarked image ` +
+      `has been saved to the processed S3 bucket under "watermarked/" folder.`
+    );
+  } else if (selectedOption === 'compress') {
+    setStatusMessage(
+      `🎉 Compression complete! Your optimized ${processingParams.compressFormat} image ` +
+      `has been saved to the processed S3 bucket under "compressed/" folder.`
+    );
   }
+  setStatusType('success');
+  setIsProcessing(false);
+}, 5000); // Increased to 5 seconds for SNS/SQS processing time
 };
 
 
 
 
-  const downloadImage = () => {
+  /*const downloadImage = () => {
     if (processedImage) {
       const url = URL.createObjectURL(processedImage);
       const a = document.createElement('a');
@@ -192,7 +214,7 @@ const processImage = async () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-  };
+  };*/
 
   return (
     <div className="container">
@@ -401,27 +423,14 @@ const processImage = async () => {
                 {selectedOption ? `📥 ${processingOptions.find(opt => opt.value === selectedOption)?.name}d` : 'Processed'}
               </div>
               <div className="preview-content">
-                {isProcessing ? (
-                  <div className="loading-spinner"></div>
-                ) : processedImage ? (
-                  <>
-                    <img 
-                      src={URL.createObjectURL(processedImage)} 
-                      alt="Processed" 
-                      className="preview-image"
-                    />
-                    <button 
-                      className="download-btn"
-                      onClick={downloadImage}
-                    >
-                      📥 Download Result
-                    </button>
-                  </>
-                ) : (
-                  <div style={{color: '#999', fontSize: '0.9rem'}}>
-                    Processed image will appear here
-                  </div>
-                )}
+                <div style={{color: '#666', fontSize: '0.9rem', textAlign: 'center', padding: '20px'}}>
+                  {isProcessing ? 
+                    "🔄 Processing in progress..." : 
+                    selectedOption ? 
+                      `✅ Your ${processingOptions.find(opt => opt.value === selectedOption)?.name.toLowerCase()}ed image will be available in S3` :
+                      "Processed image will be saved to S3"
+                  }
+                </div>
               </div>
             </div>
           </div>

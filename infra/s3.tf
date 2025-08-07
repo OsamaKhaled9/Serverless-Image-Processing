@@ -116,16 +116,22 @@ resource "aws_s3_bucket_cors_configuration" "processed_images_cors" {
   }
 }
 
-# S3 bucket notification to trigger resize Lambda
+# S3 bucket notification to publish to SNS topic
 resource "aws_s3_bucket_notification" "original_images_notification" {
   bucket = aws_s3_bucket.original_images_bucket.id
 
   lambda_function {
-    lambda_function_arn = aws_lambda_function.resize_image.arn
+    lambda_function_arn = aws_lambda_function.sns_publisher.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = ""
-    filter_suffix       = ""
   }
 
-  depends_on = [aws_lambda_permission.s3_invoke_resize]
+  depends_on = [aws_lambda_permission.s3_invoke_sns_publisher]
+}
+
+resource "aws_lambda_permission" "s3_invoke_sns_publisher" {
+  statement_id  = "AllowExecutionFromS3Bucket"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.sns_publisher.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.original_images_bucket.arn
 }
