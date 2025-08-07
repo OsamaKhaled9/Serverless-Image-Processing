@@ -23,7 +23,6 @@ A modern, serverless image processing application built with React frontend and 
 - [Testing](#testing)
 - [Monitoring](#monitoring)
 - [Contributing](#contributing)
-- [License](#license)
 
 ## Solution Overview
 
@@ -73,13 +72,13 @@ Lambda      Lambda        Lambda
 
 ## Features
 
-- **🔄 Image Resizing**: Custom dimensions with fit/fill/stretch/crop modes
-- **💧 Watermarking**: Text watermarks with position and opacity control  
-- **🗜️ Compression**: Quality optimization for JPEG, PNG, WebP formats
-- **📡 Event-driven**: SNS/SQS architecture for scalable processing
-- **🎯 User-friendly**: React interface with drag-and-drop upload
-- **🛡️ Fault tolerant**: Dead letter queues for error handling
-- **📊 Organized output**: Separate S3 folders by processing type
+- **Image Resizing**: Custom dimensions with fit/fill/stretch/crop modes
+- **Watermarking**: Text watermarks with position and opacity control  
+- **Compression**: Quality optimization for JPEG, PNG, WebP formats
+- **Event-driven**: SNS/SQS architecture for scalable processing
+- **User-friendly**: React interface with drag-and-drop upload
+- **Fault tolerant**: Dead letter queues for error handling
+- **Organized output**: Separate S3 folders by processing type
 
 ## Project Structure
 
@@ -354,6 +353,3 @@ aws s3 ls s3://image-processing-app-processed-dev-[suffix] --recursive
 3. Follow the "Adding New Function" guide
 4. Submit a pull request
 
-## License
-
-MIT License - see LICENSE file for details
