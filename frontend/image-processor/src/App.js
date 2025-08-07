@@ -92,7 +92,9 @@ const uploadImageToS3 = async (file, processingParams = {}) => {
     if (processingParams.quality) metadata['quality'] = processingParams.quality.toString();
     
     // Handle watermark parameters
-    if (processingParams.watermarkText) metadata['watermark-text'] = processingParams.watermarkText;
+    if (processingParams.watermarkText) {
+  metadata['watermark-text'] = encodeURIComponent(processingParams.watermarkText);
+    }
     if (processingParams.watermarkPosition) metadata['watermark-position'] = processingParams.watermarkPosition;
     if (processingParams.watermarkOpacity) metadata['watermark-opacity'] = processingParams.watermarkOpacity.toString();
     if (processingParams.watermarkFontsize) metadata['watermark-fontsize'] = processingParams.watermarkFontsize.toString();

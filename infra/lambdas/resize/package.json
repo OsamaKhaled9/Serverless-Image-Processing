@@ -1,0 +1,9 @@
+{
+  "name": "resize-image-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function to resize images",
+  "main": "index.js",
+  "dependencies": {
+    "sharp": "^0.32.6"
+  }
+}
