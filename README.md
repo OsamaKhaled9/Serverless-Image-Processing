@@ -39,7 +39,7 @@ The architecture is designed for:
 - **Fault tolerance** - Dead letter queues for error handling
 
 ## Architecture Diagram
-
+![Blank diagram](assets/Blank diagram.png)
 ```
 React App → API Gateway → Pre-signed URL Lambda → S3 Original Bucket
     ↓
